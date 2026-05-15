@@ -1,0 +1,18 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx-build/config.2.0.schema.json",
+  "version": "2.0",
+  "bundles": {
+    "task-level-delegation-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/taskLevelDelegation/TaskLevelDelegationWebPart.js",
+          "manifest": "./src/webparts/taskLevelDelegation/TaskLevelDelegationWebPart.manifest.json"
+        }
+      ]
+    }
+  },
+  "externals": {},
+  "localizedResources": {
+    "TaskLevelDelegationWebPartStrings": "lib/webparts/taskLevelDelegation/loc/{locale}.js"
+  }
+}

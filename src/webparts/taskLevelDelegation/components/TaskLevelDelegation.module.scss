@@ -1,0 +1,457 @@
+@import '~@fluentui/react/dist/sass/References.scss';
+
+.taskLevelDelegation {
+  overflow: hidden;
+  color: "[theme:bodyText, default: #323130]";
+  color: var(--bodyText);
+  &.teams {
+    font-family: $ms-font-family-fallbacks;
+  }
+}
+
+/* ── Root container: fills viewport height, no grow/shrink ── */
+.dashboardRoot {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 60px); /* account for SP chrome / suite bar */
+  min-height: 480px;
+  background: linear-gradient(135deg, #fafbfd 0%, #f3f5f9 100%);
+  border-radius: 10px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+
+/* ── Header bar ── */
+.headerBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 24px 14px;
+  background: linear-gradient(90deg, #d83b01 0%, #e8590c 100%);
+  color: #fff;
+  flex-shrink: 0;
+
+  .headerIcon {
+    font-size: 22px;
+    opacity: 0.9;
+  }
+
+  .headerTitle {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.2px;
+  }
+
+  .headerSubtitle {
+    font-size: 12px;
+    font-weight: 400;
+    opacity: 0.85;
+    margin-left: auto;
+  }
+}
+
+/* ── Search controls card ── */
+.searchCard {
+  flex-shrink: 0;
+  margin: 16px 20px 0;
+  padding: 16px 20px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  border: 1px solid #edebe9;
+}
+
+.searchRow {
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.searchField {
+  flex: 1 1 240px;
+  min-width: 200px;
+}
+
+.searchFieldLabel {
+  display: block;
+  font-weight: 600;
+  font-size: 12px;
+  color: #605e5c;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 6px;
+}
+
+.searchButton {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 6px !important;
+  background: #d83b01 !important;
+  color: #fff !important;
+  border: none !important;
+  transition: background 0.15s ease, transform 0.1s ease;
+
+  &:hover {
+    background: #c23300 !important;
+    transform: translateY(-1px);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+
+  i {
+    color: #fff !important;
+    font-size: 15px !important;
+  }
+}
+
+/* ── Advanced Filters Button ── */
+.filterButton {
+  flex-shrink: 0;
+  height: 38px;
+  border-radius: 6px !important;
+  border: 1px solid #8a8886 !important;
+  background: #fff !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  position: relative;
+
+  &:hover {
+    border-color: #d83b01 !important;
+    box-shadow: 0 1px 4px rgba(216, 59, 1, 0.15) !important;
+  }
+}
+
+.filterButtonActive {
+  border-color: #d83b01 !important;
+  background: #fdf0eb !important;
+  color: #d83b01 !important;
+}
+
+.filterBadge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #d83b01;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+/* ── Advanced Filters Panel Overlay ── */
+.filterOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.filterBackdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
+  animation: fadeIn 0.2s ease;
+}
+
+.filterPanel {
+  position: relative;
+  width: 380px;
+  max-width: 90vw;
+  height: 100%;
+  background: #fff;
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  animation: slideInRight 0.25s ease;
+  z-index: 1;
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.filterPanelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #edebe9;
+  flex-shrink: 0;
+
+  .filterPanelTitle {
+    font-size: 16px;
+    font-weight: 700;
+    color: #323130;
+  }
+}
+
+.filterPanelBody {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.filterSection {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.filterSectionTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: #605e5c;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.filterDateRow {
+  display: flex;
+  gap: 12px;
+
+  > div {
+    flex: 1;
+  }
+}
+
+.filterPanelFooter {
+  display: flex;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid #edebe9;
+  flex-shrink: 0;
+  justify-content: flex-end;
+}
+
+/* ── Active Filters Bar ── */
+.activeFiltersBar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px;
+  flex-wrap: wrap;
+}
+
+.activeFiltersLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: #605e5c;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-right: 4px;
+}
+
+.filterChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  background: #fdf0eb;
+  border: 1px solid #f3d6c6;
+  border-radius: 14px;
+  font-size: 11px;
+  color: #d83b01;
+  font-weight: 500;
+
+  .chipClose {
+    cursor: pointer;
+    font-size: 10px;
+    opacity: 0.7;
+    margin-left: 2px;
+
+    &:hover {
+      opacity: 1;
+    }
+  }
+}
+
+/* ── Messages area ── */
+.messagesArea {
+  flex-shrink: 0;
+  padding: 0 20px;
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── Results area: scrollable, fills remaining space ── */
+.resultsArea {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  margin: 12px 20px 16px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  border: 1px solid #edebe9;
+  display: flex;
+  flex-direction: column;
+
+  /* Custom scrollbar */
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #c8c6c4;
+    border-radius: 3px;
+
+    &:hover {
+      background: #a19f9d;
+    }
+  }
+}
+
+/* ── Results header toolbar ── */
+.resultsHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #edebe9;
+  background: #faf9f8;
+  border-radius: 8px 8px 0 0;
+  flex-shrink: 0;
+}
+
+.resultsCount {
+  font-weight: 600;
+  font-size: 13px;
+  color: #323130;
+
+  .selectedBadge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 10px;
+    background: #d83b01;
+    color: #fff;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+}
+
+/* ── Task list wrapper ── */
+.taskListWrapper {
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
+/* ── Status badges ── */
+.statusBadge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: capitalize;
+}
+
+.statusActive {
+  background: #dff6dd;
+  color: #107c10;
+  border: 1px solid #c3eec0;
+}
+
+.statusOther {
+  background: #f3f2f1;
+  color: #605e5c;
+  border: 1px solid #e1dfdd;
+}
+
+/* ── Due date styling ── */
+.dueDatePast {
+  color: #d13438;
+  font-weight: 600;
+}
+
+/* ── Empty state ── */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #a19f9d;
+
+  .emptyIcon {
+    font-size: 48px;
+    margin-bottom: 12px;
+    opacity: 0.5;
+  }
+
+  .emptyText {
+    font-size: 14px;
+    font-weight: 500;
+    color: #605e5c;
+  }
+
+  .emptyHint {
+    font-size: 12px;
+    color: #a19f9d;
+    margin-top: 4px;
+  }
+}
+
+/* ── Loading state ── */
+.loadingState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 0;
+  flex: 1 1 auto;
+}
+
+/* ── Initializing overlay ── */
+.initState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  min-height: 300px;
+}
+
+/* ── Delegate button ── */
+.delegateButton {
+  border-radius: 6px !important;
+  font-weight: 600 !important;
+  padding: 0 16px !important;
+  height: 34px !important;
+  transition: box-shadow 0.15s ease, transform 0.1s ease !important;
+
+  &:hover {
+    box-shadow: 0 2px 8px rgba(216, 59, 1, 0.3) !important;
+    transform: translateY(-1px);
+  }
+}

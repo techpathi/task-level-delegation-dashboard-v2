@@ -1,0 +1,6 @@
+{
+  "port": 4321,
+  "open": true,
+  "fullScreenErrors": true,
+  "logging": true
+}

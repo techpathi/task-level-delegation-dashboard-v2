@@ -1,0 +1,40 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx-build/package-solution.schema.json",
+  "solution": {
+    "name": "nintex-task-level-delegation-client-side-solution",
+    "id": "7ffb4d90-1784-45b6-9830-b02095c61866",
+    "version": "1.0.0.0",
+    "includeClientSideAssets": true,
+    "skipFeatureDeployment": true,
+    "isDomainIsolated": false,
+    "developer": {
+      "name": "",
+      "websiteUrl": "",
+      "privacyUrl": "",
+      "termsOfUseUrl": "",
+      "mpnId": "Undefined-1.21.1"
+    },
+    "metadata": {
+      "shortDescription": {
+        "default": "nintex-task-level-delegation description"
+      },
+      "longDescription": {
+        "default": "nintex-task-level-delegation description"
+      },
+      "screenshotPaths": [],
+      "videoUrl": "",
+      "categories": []
+    },
+    "features": [
+      {
+        "title": "nintex-task-level-delegation Feature",
+        "description": "The feature that activates elements of the nintex-task-level-delegation solution.",
+        "id": "c0c603a9-3cf1-478a-8305-2fb1d461aa62",
+        "version": "1.0.0.0"
+      }
+    ]
+  },
+  "paths": {
+    "zippedPackage": "solution/nintex-task-level-delegation.sppkg"
+  }
+}
