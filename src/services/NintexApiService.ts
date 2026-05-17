@@ -117,7 +117,6 @@ export class NintexApiService {
     }
     if (filters && filters.dueDateTo) {
       const dueDateTo = new Date(filters.dueDateTo);
-      dueDateTo.setHours(23, 59, 59, 999);
       tasks = tasks.filter((t: INintexTask) => t.dueDate && new Date(t.dueDate) <= dueDateTo);
     }
 

@@ -3,7 +3,8 @@ import * as ReactDom from 'react-dom';
 import { Version } from '@microsoft/sp-core-library';
 import {
   type IPropertyPaneConfiguration,
-  PropertyPaneTextField
+  PropertyPaneTextField,
+  PropertyPaneSlider
 } from '@microsoft/sp-property-pane';
 import { BaseClientSideWebPart } from '@microsoft/sp-webpart-base';
 import { IReadonlyTheme } from '@microsoft/sp-component-base';
@@ -18,6 +19,7 @@ export interface ITaskLevelDelegationWebPartProps {
   tokenListUrl: string;
   tokenColumnName: string;
   tokenTitleValue: string;
+  paginationSize: number;
 }
 
 export default class TaskLevelDelegationWebPart extends BaseClientSideWebPart<ITaskLevelDelegationWebPartProps> {
@@ -38,7 +40,8 @@ export default class TaskLevelDelegationWebPart extends BaseClientSideWebPart<IT
         nintexApiBaseUrl: this.properties.nintexApiBaseUrl,
         tokenListUrl: this.properties.tokenListUrl,
         tokenColumnName: this.properties.tokenColumnName,
-        tokenTitleValue: this.properties.tokenTitleValue
+        tokenTitleValue: this.properties.tokenTitleValue,
+        paginationSize: this.properties.paginationSize || 50
       }
     );
 
@@ -131,6 +134,13 @@ export default class TaskLevelDelegationWebPart extends BaseClientSideWebPart<IT
                 }),
                 PropertyPaneTextField('tokenTitleValue', {
                   label: "Token Title Filter Value"
+                }),
+                PropertyPaneSlider('paginationSize', {
+                  label: 'Pagination Size',
+                  min: 5,
+                  max: 500,
+                  step: 5,
+                  value: 50
                 })
               ]
             }

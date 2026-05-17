@@ -4,6 +4,7 @@ export interface INintexTaskAssignment {
 }
 
 export interface INintexTask {
+  key?: string;          // required by IObjectWithKey for key-based selection tracking
   id: string;            // taskId
   name: string;
   status: string;

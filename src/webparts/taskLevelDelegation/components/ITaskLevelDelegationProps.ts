@@ -11,4 +11,5 @@ export interface ITaskLevelDelegationProps {
   tokenListUrl: string;
   tokenColumnName: string;
   tokenTitleValue: string;
+  paginationSize: number;
 }

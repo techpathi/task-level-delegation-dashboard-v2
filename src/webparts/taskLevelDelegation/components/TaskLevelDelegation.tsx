@@ -23,7 +23,10 @@ import {
   Icon,
   Dropdown,
   IDropdownOption,
-  DatePicker
+  DatePicker,
+  Panel,
+  PanelType,
+  Shimmer
 } from '@fluentui/react';
 import { TokenService } from '../../../services/TokenService';
 import { NintexApiService, INintexUser } from '../../../services/NintexApiService';
@@ -31,20 +34,59 @@ import { SPHttpClient } from '@microsoft/sp-http';
 import { INintexTask } from '../../../models/INintexTask';
 import styles from './TaskLevelDelegation.module.scss';
 
+export interface ITaskFilters {
+  status: string;
+  workflowName: string;
+  createdFrom: Date | undefined;
+  createdTo: Date | undefined;
+  dueDateFrom: Date | undefined;
+  dueDateTo: Date | undefined;
+}
+
+
+
+const getStartOfDayISOString = (date: Date | undefined): string | undefined => {
+  if (!date) return undefined;
+  const d = new Date(date.getTime());
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+};
+
+const getEndOfDayISOString = (date: Date | undefined): string | undefined => {
+  if (!date) return undefined;
+  const d = new Date(date.getTime());
+  d.setHours(23, 59, 59, 999);
+  return d.toISOString();
+};
+
 export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) => {
   const [nintexToken, setNintexToken] = React.useState<string>('');
   const [assigneeUser, setAssigneeUser] = React.useState<IPersonaProps | undefined>(undefined);
   const [taskSearchText, setTaskSearchText] = React.useState<string>('');
   const [tasks, setTasks] = React.useState<INintexTask[]>([]);
-  const [selectedTasks, setSelectedTasks] = React.useState<INintexTask[]>([]);
+  // Source of truth for selection — persists across page navigation.
+  // We can't rely on the Selection object alone because Fluent UI clears it
+  // internally every time DetailsList receives a new items array reference.
+  const [selectedTaskIds, setSelectedTaskIds] = React.useState<Set<string>>(new Set());
+  // Stable ref so effects can read the latest value without stale-closure issues
+  const selectedTaskIdsRef = React.useRef<Set<string>>(new Set());
+  // Derived: all tasks whose IDs are in the selected set
+  const selectedTasks = React.useMemo(
+    () => tasks.filter(t => selectedTaskIds.has(t.id)),
+    [tasks, selectedTaskIds]
+  );
   const [isLoading, setIsLoading] = React.useState<boolean>(false);
   const [isInitializing, setIsInitializing] = React.useState<boolean>(true);
   const [errorMsg, setErrorMsg] = React.useState<string>('');
   const [successMsg, setSuccessMsg] = React.useState<string>('');
   const [hasSearched, setHasSearched] = React.useState<boolean>(false);
+  const [currentPage, setCurrentPage] = React.useState<number>(1);
+  const pageSize = props.paginationSize || 50;
+  const [previewTask, setPreviewTask] = React.useState<INintexTask | undefined>(undefined);
 
   // Delegation dialog state
   const [isDelegateDialogOpen, setIsDelegateDialogOpen] = React.useState<boolean>(false);
+  const [isConfirmingDelegate, setIsConfirmingDelegate] = React.useState<boolean>(false);
   const [delegateToUser, setDelegateToUser] = React.useState<IPersonaProps | undefined>(undefined);
   const [delegationMessage, setDelegationMessage] = React.useState<string>('');
   const [isDelegating, setIsDelegating] = React.useState<boolean>(false);
@@ -56,31 +98,50 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
   // Advanced filter state
   const [isFilterPanelOpen, setIsFilterPanelOpen] = React.useState<boolean>(false);
   // Applied filters (active in search)
-  const [appliedFilters, setAppliedFilters] = React.useState<{
-    status: string;
-    workflowName: string;
-    createdFrom: Date | undefined;
-    createdTo: Date | undefined;
-    dueDateFrom: Date | undefined;
-    dueDateTo: Date | undefined;
-  }>({ status: 'active', workflowName: '', createdFrom: undefined, createdTo: undefined, dueDateFrom: undefined, dueDateTo: undefined });
+  const [appliedFilters, setAppliedFilters] = React.useState<ITaskFilters>({ status: 'active', workflowName: '', createdFrom: undefined, createdTo: undefined, dueDateFrom: undefined, dueDateTo: undefined });
   // Draft filters (editing in panel)
-  const [draftFilters, setDraftFilters] = React.useState<{
-    status: string;
-    workflowName: string;
-    createdFrom: Date | undefined;
-    createdTo: Date | undefined;
-    dueDateFrom: Date | undefined;
-    dueDateTo: Date | undefined;
-  }>({ status: 'active', workflowName: '', createdFrom: undefined, createdTo: undefined, dueDateFrom: undefined, dueDateTo: undefined });
+  const [draftFilters, setDraftFilters] = React.useState<ITaskFilters>({ status: 'active', workflowName: '', createdFrom: undefined, createdTo: undefined, dueDateFrom: undefined, dueDateTo: undefined });
+
+  // Keep the stable ref in sync with state so effects can read it stale-free
+  React.useEffect(() => {
+    selectedTaskIdsRef.current = selectedTaskIds;
+  }, [selectedTaskIds]);
 
   const selectionRef = React.useRef(
-    new Selection({
+    new Selection<INintexTask>({
       onSelectionChanged: () => {
-        setSelectedTasks(selectionRef.current.getSelection() as INintexTask[]);
-      }
+        const currentlySelected = selectionRef.current.getSelection() as INintexTask[];
+        const currentPageItems  = selectionRef.current.getItems() as INintexTask[];
+        const currentPageIds    = new Set(currentPageItems.map(t => t.id));
+
+        // Merge: remove everything from this page then add whatever is now selected
+        setSelectedTaskIds(prev => {
+          const updated = new Set(prev);
+          currentPageIds.forEach(id => updated.delete(id));
+          currentlySelected.forEach(t => updated.add(t.id));
+          return updated;
+        });
+      },
+      getKey: (item: INintexTask) => item.id
     })
   );
+
+  // Restore visual selection state every time the current page or task list changes.
+  // DetailsList internally calls Selection.setItems() with the new slice, which clears
+  // internal selection state. We re-apply our selectedTaskIds after that settles.
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      const pageItems = tasks.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+      pageItems.forEach((task, idx) => {
+        const shouldSelect = selectedTaskIdsRef.current.has(task.id);
+        const isSelected   = selectionRef.current.isIndexSelected(idx);
+        if (shouldSelect !== isSelected) {
+          selectionRef.current.setIndexSelected(idx, shouldSelect, false);
+        }
+      });
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [currentPage, tasks]);
 
   React.useEffect(() => {
     const fetchToken = async (): Promise<void> => {
@@ -131,8 +192,9 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
     return results;
   };
 
-  const handleSearch = async (overrideSearchText?: string): Promise<void> => {
+  const handleSearch = async (overrideSearchText?: string, overrideFilters?: ITaskFilters): Promise<void> => {
     const currentSearchText = overrideSearchText !== undefined ? overrideSearchText : taskSearchText;
+    const filtersToUse = overrideFilters !== undefined ? overrideFilters : appliedFilters;
     setErrorMsg('');
     setSuccessMsg('');
     if (!assigneeUser || !assigneeUser.secondaryText) {
@@ -149,17 +211,20 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
         currentSearchText,
         nintexToken,
         {
-          status: appliedFilters.status || 'active',
-          workflowName: appliedFilters.workflowName || undefined,
-          dateFrom: appliedFilters.createdFrom ? appliedFilters.createdFrom.toISOString() : undefined,
-          dateTo: appliedFilters.createdTo ? appliedFilters.createdTo.toISOString() : undefined,
-          dueDateFrom: appliedFilters.dueDateFrom ? appliedFilters.dueDateFrom.toISOString() : undefined,
-          dueDateTo: appliedFilters.dueDateTo ? appliedFilters.dueDateTo.toISOString() : undefined
+          status: filtersToUse.status || 'active',
+          workflowName: filtersToUse.workflowName || undefined,
+          dateFrom: getStartOfDayISOString(filtersToUse.createdFrom),
+          dateTo: getEndOfDayISOString(filtersToUse.createdTo),
+          dueDateFrom: getStartOfDayISOString(filtersToUse.dueDateFrom),
+          dueDateTo: getEndOfDayISOString(filtersToUse.dueDateTo)
         }
       );
       selectionRef.current.setAllSelected(false);
-      setTasks(fetchedTasks);
-      setSelectedTasks([]);
+      // Map `key` onto every task so DetailsList can match items by unique ID.
+      setTasks(fetchedTasks.map(t => ({ ...t, key: t.id })));
+      setSelectedTaskIds(new Set());
+      selectedTaskIdsRef.current = new Set();
+      setCurrentPage(1);
     } catch (err) {
       console.error('Error searching tasks:', err);
       setErrorMsg(err.message || 'An unexpected error occurred while searching tasks.');
@@ -194,9 +259,14 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
     setIsFilterPanelOpen(true);
   };
 
+  const isFilterDirty = JSON.stringify(appliedFilters) !== JSON.stringify(draftFilters);
+
   const applyFilters = (): void => {
     setAppliedFilters({ ...draftFilters });
     setIsFilterPanelOpen(false);
+    if (hasSearched && assigneeUser) {
+      handleSearch(undefined, draftFilters).catch(console.error);
+    }
   };
 
   const clearAllFilters = (): void => {
@@ -204,6 +274,9 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
     setDraftFilters(defaults);
     setAppliedFilters(defaults);
     setIsFilterPanelOpen(false);
+    if (hasSearched && assigneeUser) {
+      handleSearch(undefined, defaults).catch(console.error);
+    }
   };
 
   const removeAppliedFilter = (key: string): void => {
@@ -217,6 +290,10 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
       case 'dueDateTo': updated.dueDateTo = undefined; break;
     }
     setAppliedFilters(updated);
+    setDraftFilters(updated); // Sync draft as well
+    if (hasSearched && assigneeUser) {
+      handleSearch(undefined, updated).catch(console.error);
+    }
   };
 
   const formatDate = (d: Date): string => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -228,7 +305,14 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
     setDialogSuccessMsg('');
     setDelegateProgress(0);
     setDelegateProgressDesc('');
+    setIsConfirmingDelegate(false);
     setIsDelegateDialogOpen(true);
+  };
+
+  const clearAllSelections = (): void => {
+    selectionRef.current.setAllSelected(false);
+    setSelectedTaskIds(new Set());
+    selectedTaskIdsRef.current = new Set();
   };
 
   const handleDelegate = async (): Promise<void> => {
@@ -261,13 +345,15 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
     const errors: string[] = [];
     let completed = 0;
 
-    for (const task of selectedTasks) {
+    setDelegateProgressDesc(`Delegating ${selectedTasks.length} tasks in parallel...`);
+
+    const delegatePromises = selectedTasks.map(async (task) => {
       const assignments = task.taskAssignments || [];
       if (assignments.length === 0) {
         errors.push(`Task "${task.name}" has no assignments to delegate.`);
         completed++;
         setDelegateProgress(completed / selectedTasks.length);
-        continue;
+        return;
       }
 
       for (const assignment of assignments) {
@@ -282,7 +368,6 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
           continue;
         }
 
-        setDelegateProgressDesc(`Delegating "${task.name}"...`);
         try {
           await nintexApiService.delegateTaskAssignment(
             task.id,
@@ -298,7 +383,9 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
 
       completed++;
       setDelegateProgress(completed / selectedTasks.length);
-    }
+    });
+
+    await Promise.all(delegatePromises);
 
     setIsDelegating(false);
 
@@ -311,8 +398,6 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
       // Refresh task list with cleared search
       await handleSearch('');
       setSuccessMsg(msg);
-      // Auto-dismiss after 5 seconds
-      setTimeout(() => setSuccessMsg(''), 5000);
     }
   };
 
@@ -360,7 +445,9 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
       isSortedDescending: sortColumn === 'colName' && isSortDescending,
       onColumnClick: onColumnClick,
       onRender: (item: INintexTask) => (
-        <span style={{ fontWeight: 500, color: '#323130' }}>{item.name}</span>
+        <a className={styles.taskNameLink} onClick={() => setPreviewTask(item)}>
+          {item.name}
+        </a>
       )
     },
     {
@@ -433,6 +520,7 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
         const isPast = d < new Date();
         return (
           <span className={isPast ? styles.dueDatePast : undefined} style={{ fontSize: '12px' }}>
+            {isPast && <Icon iconName="Warning" className={styles.overdueIcon} style={{marginRight: '4px'}} />}
             {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
           </span>
         );
@@ -458,14 +546,29 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
         <>
           {/* ── Search Controls Card ── */}
           <div className={styles.searchCard}>
-            <div className={styles.searchRow}>
+            <form onSubmit={(e) => { e.preventDefault(); handleSearch().catch(console.error); }} className={styles.searchRow}>
               <div className={styles.searchField}>
                 <label className={styles.searchFieldLabel}>Assignee</label>
                 <NormalPeoplePicker
                   onResolveSuggestions={onResolveSuggestions}
                   itemLimit={1}
                   disabled={!nintexToken || isLoading}
-                  onChange={(items) => setAssigneeUser(items && items.length > 0 ? items[0] : undefined)}
+                  onChange={(items) => {
+                    const newAssignee = items && items.length > 0 ? items[0] : undefined;
+                    setAssigneeUser(newAssignee);
+                    if (!newAssignee) {
+                      setTasks([]);
+                      setHasSearched(false);
+                      setTaskSearchText('');
+                      const defaults = { status: 'active', workflowName: '', createdFrom: undefined, createdTo: undefined, dueDateFrom: undefined, dueDateTo: undefined };
+                      setAppliedFilters(defaults);
+                      setDraftFilters(defaults);
+                    } else if (hasSearched) {
+                       // Reset tasks but keep search state to let them hit search again or auto search
+                       setTasks([]);
+                       setHasSearched(false);
+                    }
+                  }}
                   selectedItems={assigneeUser ? [assigneeUser] : []}
                   resolveDelay={500}
                   styles={{ root: { maxWidth: '100%' } }}
@@ -480,6 +583,12 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
                   value={taskSearchText}
                   onChange={(e, val) => setTaskSearchText(val || '')}
                   onSearch={() => handleSearch()}
+                  onClear={() => {
+                    setTaskSearchText('');
+                    if (hasSearched && assigneeUser) {
+                      handleSearch('').catch(console.error);
+                    }
+                  }}
                   disabled={!nintexToken || isLoading}
                 />
               </div>
@@ -502,11 +611,11 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
                 iconProps={{ iconName: 'Search' }}
                 title="Search Tasks"
                 ariaLabel="Search Tasks"
-                onClick={() => handleSearch()}
+                type="submit"
                 disabled={!nintexToken || isLoading}
                 className={styles.searchButton}
               />
-            </div>
+            </form>
           </div>
 
           {/* ── Active Filters Chips ── */}
@@ -549,6 +658,9 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
                   <Icon iconName="Cancel" className={styles.chipClose} onClick={() => removeAppliedFilter('dueDateTo')} />
                 </span>
               )}
+              <span className={styles.clearAllLink} onClick={clearAllFilters}>
+                Clear all
+              </span>
             </div>
           )}
 
@@ -570,8 +682,12 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
 
           {/* ── Results Area (scrollable) ── */}
           {isLoading ? (
-            <div className={styles.loadingState}>
-              <Spinner size={SpinnerSize.large} label="Searching tasks..." />
+            <div className={styles.loadingState} style={{ flexDirection: 'column', gap: '12px', alignItems: 'stretch', padding: '20px' }}>
+              <Shimmer />
+              <Shimmer width="75%" />
+              <Shimmer width="50%" />
+              <Shimmer width="85%" />
+              <Shimmer width="60%" />
             </div>
           ) : tasks.length > 0 ? (
             <div className={styles.resultsArea}>
@@ -580,42 +696,82 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
                 <span className={styles.resultsCount}>
                   {tasks.length} task{tasks.length !== 1 ? 's' : ''} found
                   {selectedTasks.length > 0 && (
-                    <span className={styles.selectedBadge}>
-                      {selectedTasks.length} selected
-                    </span>
+                    <>
+                      <span className={styles.selectedBadge}>
+                        {selectedTasks.length} selected (out of {tasks.length})
+                      </span>
+                      <span
+                        className={styles.clearSelectionLink}
+                        onClick={clearAllSelections}
+                        title="Clear all selected tasks"
+                      >
+                        Clear selection
+                      </span>
+                    </>
                   )}
                 </span>
-                {selectedTasks.length > 0 && (
-                  <PrimaryButton
-                    text={`Delegate (${selectedTasks.length})`}
-                    iconProps={{ iconName: 'People' }}
-                    onClick={openDelegateDialog}
-                    className={styles.delegateButton}
+                <div className={styles.resultsActions}>
+                  {selectedTasks.length > 0 && (
+                    <PrimaryButton
+                      text={`Delegate (${selectedTasks.length})`}
+                      iconProps={{ iconName: 'People' }}
+                      onClick={openDelegateDialog}
+                      className={styles.delegateButton}
+                    />
+                  )}
+                  <IconButton
+                    iconProps={{ iconName: 'Refresh' }}
+                    title="Refresh results"
+                    ariaLabel="Refresh results"
+                    onClick={() => handleSearch()}
+                    className={styles.refreshButton}
                   />
-                )}
+                </div>
               </div>
 
               {/* Scrollable task list */}
               <div className={styles.taskListWrapper}>
                 <DetailsList
-                  items={tasks}
+                  items={tasks.slice((currentPage - 1) * pageSize, currentPage * pageSize)}
                   columns={taskColumns}
                   setKey="taskSet"
                   selection={selectionRef.current}
                   selectionMode={SelectionMode.multiple}
                   selectionPreservedOnEmptyClick={true}
                   ariaLabelForSelectionColumn="Toggle selection"
-                  ariaLabelForSelectAllCheckbox="Toggle selection for all items"
+                  ariaLabelForSelectAllCheckbox="Select all tasks on this page"
                   checkButtonAriaLabel="Row checkbox"
                 />
               </div>
+              {/* Pagination */}
+              {tasks.length > pageSize && (
+                <div className={styles.paginationBar}>
+                  <IconButton
+                    iconProps={{ iconName: 'ChevronLeft' }}
+                    title="Previous Page"
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    className={styles.pageNavButton}
+                  />
+                  <span className={styles.paginationInfo}>
+                    Page {currentPage} of {Math.ceil(tasks.length / pageSize)}
+                  </span>
+                  <IconButton
+                    iconProps={{ iconName: 'ChevronRight' }}
+                    title="Next Page"
+                    disabled={currentPage >= Math.ceil(tasks.length / pageSize)}
+                    onClick={() => setCurrentPage(prev => Math.min(Math.ceil(tasks.length / pageSize), prev + 1))}
+                    className={styles.pageNavButton}
+                  />
+                </div>
+              )}
             </div>
           ) : hasSearched ? (
             <div className={styles.resultsArea}>
               <div className={styles.emptyState}>
                 <Icon iconName="SearchIssue" className={styles.emptyIcon} />
                 <span className={styles.emptyText}>No tasks found</span>
-                <span className={styles.emptyHint}>Try adjusting your search criteria or selecting a different assignee.</span>
+                <span className={styles.emptyHint}>Try changing the status filter, broadening the date range, or selecting a different assignee.</span>
               </div>
             </div>
           ) : (
@@ -647,40 +803,63 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
         }}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '0 5px' }}>
+          {isConfirmingDelegate ? (
+            <div className={styles.confirmSummary}>
+              <MessageBar messageBarType={MessageBarType.warning}>
+                You are about to delegate <strong>{selectedTasks.length}</strong> task(s). This action cannot be undone.
+              </MessageBar>
+              <div className={styles.confirmRow}>
+                <span className={styles.confirmLabel}>From Assignee</span>
+                <span className={styles.confirmValue}>{assigneeUser?.text}</span>
+              </div>
+              <div className={styles.confirmRow}>
+                <span className={styles.confirmLabel}>To Delegate</span>
+                <span className={styles.confirmValue}>{delegateToUser?.text}</span>
+              </div>
+              {delegationMessage && (
+                <div className={styles.confirmRow}>
+                  <span className={styles.confirmLabel}>Message</span>
+                  <span className={styles.confirmValue}>{delegationMessage}</span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <MessageBar messageBarType={MessageBarType.info}>
+                Delegating <strong>{selectedTasks.length}</strong> task{selectedTasks.length !== 1 ? 's' : ''} to a new user.
+              </MessageBar>
 
-          <MessageBar messageBarType={MessageBarType.info}>
-            Delegating <strong>{selectedTasks.length}</strong> task{selectedTasks.length !== 1 ? 's' : ''} to a new user.
-          </MessageBar>
+              <div>
+                <label style={{ display: 'block', fontWeight: 600, fontSize: '12px', marginBottom: '4px' }}>
+                  Delegate to <span style={{ color: '#d13438' }}>*</span>
+                </label>
+                <NormalPeoplePicker
+                  onResolveSuggestions={onResolveDelegateSuggestions}
+                  itemLimit={1}
+                  disabled={isDelegating}
+                  onChange={(items) => setDelegateToUser(items && items.length > 0 ? items[0] : undefined)}
+                  selectedItems={delegateToUser ? [delegateToUser] : []}
+                  resolveDelay={500}
+                  styles={{ root: { maxWidth: '100%' } }}
+                  inputProps={{ placeholder: 'Search for a Nintex user...' }}
+                />
+              </div>
 
-          <div>
-            <label style={{ display: 'block', fontWeight: 600, fontSize: '12px', marginBottom: '4px' }}>
-              Delegate to <span style={{ color: '#d13438' }}>*</span>
-            </label>
-            <NormalPeoplePicker
-              onResolveSuggestions={onResolveDelegateSuggestions}
-              itemLimit={1}
-              disabled={isDelegating}
-              onChange={(items) => setDelegateToUser(items && items.length > 0 ? items[0] : undefined)}
-              selectedItems={delegateToUser ? [delegateToUser] : []}
-              resolveDelay={500}
-              styles={{ root: { maxWidth: '100%' } }}
-              inputProps={{ placeholder: 'Search for a Nintex user...' }}
-            />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontWeight: 600, fontSize: '12px', marginBottom: '4px' }}>
-              Message (optional)
-            </label>
-            <TextField
-              multiline
-              rows={3}
-              value={delegationMessage}
-              onChange={(e, val) => setDelegationMessage(val || '')}
-              disabled={isDelegating}
-              placeholder="Optional reason for delegation..."
-            />
-          </div>
+              <div>
+                <label style={{ display: 'block', fontWeight: 600, fontSize: '12px', marginBottom: '4px' }}>
+                  Message (optional)
+                </label>
+                <TextField
+                  multiline
+                  rows={3}
+                  value={delegationMessage}
+                  onChange={(e, val) => setDelegationMessage(val || '')}
+                  disabled={isDelegating}
+                  placeholder="Optional reason for delegation..."
+                />
+              </div>
+            </>
+          )}
 
           {isDelegating && (
             <ProgressIndicator
@@ -710,13 +889,30 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
             </span>
           )}
           <DefaultButton
-            onClick={() => setIsDelegateDialogOpen(false)}
-            text="Cancel"
+            onClick={() => {
+              if (isConfirmingDelegate) {
+                setIsConfirmingDelegate(false);
+              } else {
+                setIsDelegateDialogOpen(false);
+              }
+            }}
+            text={isConfirmingDelegate ? "Back" : "Cancel"}
             disabled={isDelegating}
           />
           <PrimaryButton
-            onClick={handleDelegate}
-            text="Delegate"
+            onClick={async () => {
+              if (!isConfirmingDelegate) {
+                if (!delegateToUser) {
+                  setDialogErrorMsg('Please select a user to delegate to.');
+                  return;
+                }
+                setDialogErrorMsg('');
+                setIsConfirmingDelegate(true);
+              } else {
+                await handleDelegate();
+              }
+            }}
+            text={isConfirmingDelegate ? "Confirm Delegation" : "Delegate"}
             disabled={isDelegating || !delegateToUser}
           />
         </DialogFooter>
@@ -739,6 +935,12 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
 
             {/* Panel Body */}
             <div className={styles.filterPanelBody}>
+              {isFilterDirty && (
+                <div className={styles.unsavedBanner}>
+                  <Icon iconName="Warning" />
+                  <span>You have unsaved filter changes.</span>
+                </div>
+              )}
               {/* Status */}
               <div className={styles.filterSection}>
                 <span className={styles.filterSectionTitle}>Task Status</span>
@@ -762,6 +964,23 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
               {/* Created Date Range */}
               <div className={styles.filterSection}>
                 <span className={styles.filterSectionTitle}>Created Date Range</span>
+                <div className={styles.datePresets}>
+                  <button className={styles.presetButton} onClick={() => {
+                    const today = new Date();
+                    const past7 = new Date(); past7.setDate(today.getDate() - 7);
+                    setDraftFilters({...draftFilters, createdFrom: past7, createdTo: today});
+                  }}>Last 7 days</button>
+                  <button className={styles.presetButton} onClick={() => {
+                    const today = new Date();
+                    const past30 = new Date(); past30.setDate(today.getDate() - 30);
+                    setDraftFilters({...draftFilters, createdFrom: past30, createdTo: today});
+                  }}>Last 30 days</button>
+                  <button className={styles.presetButton} onClick={() => {
+                    const today = new Date();
+                    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                    setDraftFilters({...draftFilters, createdFrom: startOfMonth, createdTo: today});
+                  }}>This month</button>
+                </div>
                 <div className={styles.filterDateRow}>
                   <div>
                     <DatePicker
@@ -810,11 +1029,70 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
             {/* Panel Footer */}
             <div className={styles.filterPanelFooter}>
               <DefaultButton text="Clear All" onClick={clearAllFilters} />
-              <PrimaryButton text="Apply Filters" onClick={applyFilters} />
+              <PrimaryButton text="Apply Filters" onClick={applyFilters} className={isFilterDirty ? styles.applyButtonDirty : ''} />
             </div>
           </div>
         </div>
       )}
+
+      {/* Task Preview Panel */}
+      <Panel
+        isOpen={!!previewTask}
+        onDismiss={() => setPreviewTask(undefined)}
+        type={PanelType.medium}
+        headerText="Task Details"
+        closeButtonAriaLabel="Close"
+      >
+        {previewTask && (
+          <div className={styles.detailPanelBody}>
+            <div className={styles.detailSection}>
+              <span className={styles.detailLabel}>Task Name</span>
+              <span className={styles.detailValue} style={{ fontWeight: 600 }}>{previewTask.name}</span>
+            </div>
+            
+            <div className={styles.detailSection}>
+              <span className={styles.detailLabel}>Workflow</span>
+              <span className={styles.detailValue}>{previewTask.workflowName}</span>
+            </div>
+
+            <div className={styles.detailSection}>
+              <span className={styles.detailLabel}>Status</span>
+              <span className={styles.detailValue} style={{ textTransform: 'capitalize' }}>{previewTask.status}</span>
+            </div>
+
+            <div className={styles.detailSection}>
+              <span className={styles.detailLabel}>Dates</span>
+              <span className={styles.detailValue}>
+                Created: {previewTask.createdDate ? new Date(previewTask.createdDate).toLocaleDateString() : 'N/A'}<br/>
+                Due: {previewTask.dueDate ? new Date(previewTask.dueDate).toLocaleDateString() : 'N/A'}
+              </span>
+            </div>
+
+            {previewTask.description && (
+              <div className={styles.detailSection}>
+                <span className={styles.detailLabel}>Description</span>
+                <div className={styles.detailDescription}>
+                  {previewTask.description}
+                </div>
+              </div>
+            )}
+
+            {previewTask.taskAssignments && previewTask.taskAssignments.length > 0 && (
+              <div className={styles.detailSection}>
+                <span className={styles.detailLabel}>Assignments</span>
+                <div className={styles.detailAssignments}>
+                  {previewTask.taskAssignments.map((assignment, idx) => (
+                    <span key={idx} className={styles.assignmentChip}>
+                      <Icon iconName="Contact" />
+                      {assignment.assignee}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </Panel>
     </div>
   );
 };
