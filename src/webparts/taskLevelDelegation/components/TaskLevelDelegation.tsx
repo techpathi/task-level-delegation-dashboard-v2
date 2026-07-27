@@ -39,8 +39,6 @@ export interface ITaskFilters {
   workflowName: string;
   createdFrom: Date | undefined;
   createdTo: Date | undefined;
-  dueDateFrom: Date | undefined;
-  dueDateTo: Date | undefined;
 }
 
 
@@ -98,9 +96,9 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
   // Advanced filter state
   const [isFilterPanelOpen, setIsFilterPanelOpen] = React.useState<boolean>(false);
   // Applied filters (active in search)
-  const [appliedFilters, setAppliedFilters] = React.useState<ITaskFilters>({ status: 'active', workflowName: '', createdFrom: undefined, createdTo: undefined, dueDateFrom: undefined, dueDateTo: undefined });
+  const [appliedFilters, setAppliedFilters] = React.useState<ITaskFilters>({ status: 'active', workflowName: '', createdFrom: undefined, createdTo: undefined });
   // Draft filters (editing in panel)
-  const [draftFilters, setDraftFilters] = React.useState<ITaskFilters>({ status: 'active', workflowName: '', createdFrom: undefined, createdTo: undefined, dueDateFrom: undefined, dueDateTo: undefined });
+  const [draftFilters, setDraftFilters] = React.useState<ITaskFilters>({ status: 'active', workflowName: '', createdFrom: undefined, createdTo: undefined });
 
   // Keep the stable ref in sync with state so effects can read it stale-free
   React.useEffect(() => {
@@ -214,9 +212,7 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
           status: filtersToUse.status || 'active',
           workflowName: filtersToUse.workflowName || undefined,
           dateFrom: getStartOfDayISOString(filtersToUse.createdFrom),
-          dateTo: getEndOfDayISOString(filtersToUse.createdTo),
-          dueDateFrom: getStartOfDayISOString(filtersToUse.dueDateFrom),
-          dueDateTo: getEndOfDayISOString(filtersToUse.dueDateTo)
+          dateTo: getEndOfDayISOString(filtersToUse.createdTo)
         }
       );
       selectionRef.current.setAllSelected(false);
@@ -249,8 +245,6 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
     if (appliedFilters.workflowName) count++;
     if (appliedFilters.createdFrom) count++;
     if (appliedFilters.createdTo) count++;
-    if (appliedFilters.dueDateFrom) count++;
-    if (appliedFilters.dueDateTo) count++;
     return count;
   };
 
@@ -270,7 +264,7 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
   };
 
   const clearAllFilters = (): void => {
-    const defaults = { status: 'active', workflowName: '', createdFrom: undefined, createdTo: undefined, dueDateFrom: undefined, dueDateTo: undefined };
+    const defaults = { status: 'active', workflowName: '', createdFrom: undefined, createdTo: undefined };
     setDraftFilters(defaults);
     setAppliedFilters(defaults);
     setIsFilterPanelOpen(false);
@@ -286,8 +280,6 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
       case 'workflowName': updated.workflowName = ''; break;
       case 'createdFrom': updated.createdFrom = undefined; break;
       case 'createdTo': updated.createdTo = undefined; break;
-      case 'dueDateFrom': updated.dueDateFrom = undefined; break;
-      case 'dueDateTo': updated.dueDateTo = undefined; break;
     }
     setAppliedFilters(updated);
     setDraftFilters(updated); // Sync draft as well
@@ -416,7 +408,7 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
       let valB = b[fieldName] || '';
 
       // Date fields: compare as dates
-      if (fieldName === 'createdDate' || fieldName === 'dueDate') {
+      if (fieldName === 'createdDate') {
         const dateA = valA ? new Date(valA as string).getTime() : 0;
         const dateB = valB ? new Date(valB as string).getTime() : 0;
         return newIsSortedDescending ? dateB - dateA : dateA - dateB;
@@ -503,28 +495,6 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
           </span>
         );
       }
-    },
-    {
-      key: 'colDueDate',
-      name: 'Due Date',
-      fieldName: 'dueDate',
-      minWidth: 100,
-      maxWidth: 130,
-      isResizable: true,
-      isSorted: sortColumn === 'colDueDate',
-      isSortedDescending: sortColumn === 'colDueDate' && isSortDescending,
-      onColumnClick: onColumnClick,
-      onRender: (item: INintexTask) => {
-        if (!item.dueDate) return <span style={{ color: '#a19f9d', fontSize: '12px' }}>—</span>;
-        const d = new Date(item.dueDate);
-        const isPast = d < new Date();
-        return (
-          <span className={isPast ? styles.dueDatePast : undefined} style={{ fontSize: '12px' }}>
-            {isPast && <Icon iconName="Warning" className={styles.overdueIcon} style={{marginRight: '4px'}} />}
-            {d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-          </span>
-        );
-      }
     }
   ];
 
@@ -560,7 +530,7 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
                       setTasks([]);
                       setHasSearched(false);
                       setTaskSearchText('');
-                      const defaults = { status: 'active', workflowName: '', createdFrom: undefined, createdTo: undefined, dueDateFrom: undefined, dueDateTo: undefined };
+                      const defaults = { status: 'active', workflowName: '', createdFrom: undefined, createdTo: undefined };
                       setAppliedFilters(defaults);
                       setDraftFilters(defaults);
                     } else if (hasSearched) {
@@ -644,18 +614,6 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
                 <span className={styles.filterChip}>
                   Created to: {formatDate(appliedFilters.createdTo)}
                   <Icon iconName="Cancel" className={styles.chipClose} onClick={() => removeAppliedFilter('createdTo')} />
-                </span>
-              )}
-              {appliedFilters.dueDateFrom && (
-                <span className={styles.filterChip}>
-                  Due from: {formatDate(appliedFilters.dueDateFrom)}
-                  <Icon iconName="Cancel" className={styles.chipClose} onClick={() => removeAppliedFilter('dueDateFrom')} />
-                </span>
-              )}
-              {appliedFilters.dueDateTo && (
-                <span className={styles.filterChip}>
-                  Due to: {formatDate(appliedFilters.dueDateTo)}
-                  <Icon iconName="Cancel" className={styles.chipClose} onClick={() => removeAppliedFilter('dueDateTo')} />
                 </span>
               )}
               <span className={styles.clearAllLink} onClick={clearAllFilters}>
@@ -997,29 +955,6 @@ export const TaskLevelDelegation: React.FC<ITaskLevelDelegationProps> = (props) 
                       onSelectDate={(date) => setDraftFilters({ ...draftFilters, createdTo: date || undefined })}
                       minDate={draftFilters.createdFrom || undefined}
                       maxDate={new Date()}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Due Date Range */}
-              <div className={styles.filterSection}>
-                <span className={styles.filterSectionTitle}>Due Date Range</span>
-                <div className={styles.filterDateRow}>
-                  <div>
-                    <DatePicker
-                      placeholder="From..."
-                      value={draftFilters.dueDateFrom}
-                      onSelectDate={(date) => setDraftFilters({ ...draftFilters, dueDateFrom: date || undefined })}
-                      maxDate={draftFilters.dueDateTo || undefined}
-                    />
-                  </div>
-                  <div>
-                    <DatePicker
-                      placeholder="To..."
-                      value={draftFilters.dueDateTo}
-                      onSelectDate={(date) => setDraftFilters({ ...draftFilters, dueDateTo: date || undefined })}
-                      minDate={draftFilters.dueDateFrom || undefined}
                     />
                   </div>
                 </div>

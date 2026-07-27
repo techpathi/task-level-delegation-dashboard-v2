@@ -568,23 +568,7 @@
   border: 1px solid #e1dfdd;
 }
 
-/* ── Due date styling ── */
-.dueDatePast {
-  color: #d13438;
-  font-weight: 600;
-}
 
-/* #16 ── Overdue indicator ── */
-.overdueWrapper {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.overdueIcon {
-  font-size: 12px;
-  color: #d13438;
-}
 
 /* #9 ── Clickable task name ── */
 .taskNameLink {

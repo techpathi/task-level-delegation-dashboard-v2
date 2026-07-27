@@ -67,8 +67,6 @@ export class NintexApiService {
       workflowName?: string;
       dateFrom?: string;   // ISO 8601 – used as the API 'from' param (created date range)
       dateTo?: string;     // ISO 8601 – used as the API 'to' param (created date range)
-      dueDateFrom?: string; // client-side filter on task due date
-      dueDateTo?: string;   // client-side filter on task due date
     }
   ): Promise<INintexTask[]> {
     if (!this.baseUrl) {
@@ -108,16 +106,6 @@ export class NintexApiService {
     if (taskName) {
       const lowerTaskName = taskName.toLowerCase();
       tasks = tasks.filter((t: INintexTask) => t.name && t.name.toLowerCase().indexOf(lowerTaskName) !== -1);
-    }
-
-    // Client-side filter: due date range
-    if (filters && filters.dueDateFrom) {
-      const dueDateFrom = new Date(filters.dueDateFrom);
-      tasks = tasks.filter((t: INintexTask) => t.dueDate && new Date(t.dueDate) >= dueDateFrom);
-    }
-    if (filters && filters.dueDateTo) {
-      const dueDateTo = new Date(filters.dueDateTo);
-      tasks = tasks.filter((t: INintexTask) => t.dueDate && new Date(t.dueDate) <= dueDateTo);
     }
 
     return tasks;
@@ -299,7 +287,17 @@ export class NintexApiService {
     }
 
     const data = await response.json();
-    return Array.isArray(data) ? data : data.users || [];
+    const rawUsers: INintexUser[] = Array.isArray(data) ? data : data.users || [];
+
+    const lower = filterText.trim().toLowerCase();
+    if (!lower) return rawUsers;
+    const terms = lower.split(/\s+/).filter(t => t.length > 0);
+
+    return rawUsers.filter((u: INintexUser) => {
+      const fullName = `${u.firstName || ''} ${u.lastName || ''}`.trim().toLowerCase();
+      const email = (u.email || '').toLowerCase();
+      return terms.every(term => fullName.indexOf(term) !== -1 || email.indexOf(term) !== -1);
+    });
   }
 
   public async getNintexUserById(id: string, token: string): Promise<INintexUser | undefined> {
